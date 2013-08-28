@@ -83,8 +83,8 @@ TimeDay   = Struct.new(:mon, :day, :year, :pairs, :group_hours)
 # {
 #   "day_starts" : "8:00",
 #   "hours" : {
-#     "Client A" : 20.0,      # Hours per week for Client A
-#     "Client B" : 20.0,
+#     "ClientA" : 20.0,      # Hours per week for Client A
+#     "ClientB" : 20.0,
 #     ...
 #   }
 # }
