@@ -74,7 +74,6 @@
 require 'optparse'
 require 'date'
 require 'json'
-require 'pp'
 
 TimeEntry = Struct.new(:is_start, :time, :description)
 TimePair  = Struct.new(:start, :end)
