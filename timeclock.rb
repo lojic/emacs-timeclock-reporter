@@ -465,10 +465,15 @@ if options[:week_stats]
     total_hours += value
   end
 
-  # First print records for companies with allocations but no time
-  allocations.each do |k,v|
-    puts "( %6.2f %% ) %5.2f / %5.2f #{k}" % [ 0.0, 0.0, v ] if
-      !company_hours.map {|e| e[0]}.include?(k)
+  # First print records for companies with allocations but no
+  # time. These are only the "unstarted" categories, so sort by
+  # allocated hours descending.
+  hours_keys = company_hours.map {|e| e[0]}
+  allocations. # { k=>v, ... }
+    select {|k,v| !hours_keys.include?(k) }. # [ [k,v] ]
+    sort {|a,b| b[1] <=> a[1] }.
+    each do |k,v|
+    puts "( %6.2f %% ) %5.2f / %5.2f #{k}" % [ 0.0, 0.0, v ]
   end
 
   company_hours.sort {|a,b| a[2] <=> b[2] }.each do |pair|
