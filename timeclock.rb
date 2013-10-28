@@ -485,6 +485,7 @@ if options[:week_stats]
 
   puts ''
   expected = expected_hours(total_hours, total_allocated)
+
   if expected > total_hours
     puts "Behind %.1f hours" % (expected - total_hours)
   else
