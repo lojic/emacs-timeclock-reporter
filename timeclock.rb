@@ -88,7 +88,7 @@ TimeDay   = Struct.new(:mon, :day, :year, :pairs, :group_hours)
 #     ...
 #   }
 # }
-CONFIG = JSON.parse(IO.read("/Users/badkins/sync/business/timeclock.json"))
+CONFIG = JSON.parse(IO.read(File.join(File.dirname(__FILE__), 'timeclock.json')))
 
 #------------------------------------------------------------------------
 # Compute a grouping key from the time description based on the
@@ -340,7 +340,7 @@ def expected_hours total, allocated
   t1 = DateTime.parse("#{CONFIG['day_starts']} #{Time.now.zone}").to_time
   t2 = Time.now
 
-  daily = allocated / 6.0
+  daily = allocated / (CONFIG['work_days'] || 5).to_i
 
   percent_of_day = (t2-t1) / ((t1 + ((daily / 0.80) * 3600).to_i) - t1)
 
@@ -382,9 +382,16 @@ end
 rest = opts.parse(ARGV) rescue RDoc::usage('usage')
 
 # Parse the file
-entries = parse_file(STDIN, options).select do |e|
-  match = e[0][:description] =~ /#{rest[0] || '.*'}/i
-  options[:invert_match] ? !match : match
+begin
+  timelog_path = CONFIG['timelog_path']
+  raise "Unable to find your timelog file at: '#{timelog_path}'" unless timelog_path && File.exists?(timelog_path)
+  file = File.new(timelog_path, 'r')
+  entries = parse_file(file, options).select do |e|
+    match = e[0][:description] =~ /#{rest[0] || '.*'}/i
+    options[:invert_match] ? !match : match
+  end
+ensure
+  file.close if file
 end
 
 # Group into days
