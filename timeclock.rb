@@ -353,9 +353,10 @@ end
 options = {
   :begin_date   => DateTime.parse("2000-01-01", true),
   :end_date     => DateTime.parse("2050-01-01", true),
-  :statistics   => false,
-  :invert_match => false,
   :group_levels => 0,
+  :invert_match => false,
+  :statistics   => false,
+  :today        => false,
   :week_date    => beginning_of_week(DateTime.parse(Date.today.to_s)),
 }
 opts = OptionParser.new
@@ -366,6 +367,7 @@ opts.on("-s", "--statistics")      { options[:statistics]    = true             
 opts.on("-v", "--invert-match")    { options[:invert_match]  = true              }
 opts.on("-t", "--today-only") do
   options[:begin_date] = DateTime.parse(Time.now.strftime("%Y-%m-%d"))
+  options[:today] = true
 end
 opts.on("-g", "--group LEVELS") do |levels|
   options[:group_levels] = levels.to_i
@@ -443,6 +445,18 @@ if options[:statistics]
     end
   end
   puts "%5.2f Total hours" % sum
+
+  if options[:today]
+    puts
+    puts 'Daily Percentage'
+    puts '----------------'
+
+    t1 = DateTime.parse("#{CONFIG['day_starts']} #{Time.now.zone}").to_time
+    t2 = Time.now
+    elapsed_hours = (t2-t1).to_f / 3600.0
+
+    puts "Daily percent: %5.1f" % ((total_sum / elapsed_hours) * 100.0)
+  end
 end
 
 if options[:week_stats]
