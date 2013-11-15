@@ -65,19 +65,12 @@
 #       --statistics
 #       --group 1
 #
-# = Author
+# = Authors
 # Brian Adkins
+# Tom Davies
 #
 # = Date
-# 03/05/08
-
-require 'optparse'
-require 'date'
-require 'json'
-
-TimeEntry = Struct.new(:is_start, :time, :description)
-TimePair  = Struct.new(:start, :end)
-TimeDay   = Struct.new(:mon, :day, :year, :pairs, :group_hours)
+# 03/05/2008
 
 # Config file is of the form:
 # {
@@ -88,434 +81,481 @@ TimeDay   = Struct.new(:mon, :day, :year, :pairs, :group_hours)
 #     ...
 #   }
 # }
-CONFIG = JSON.parse(IO.read(File.join(File.dirname(__FILE__), 'timeclock.json')))
 
-#------------------------------------------------------------------------
-# Compute a grouping key from the time description based on the
-# specified levels. For example, if the description was the following:
-# Lojic research Ruby
-# Then the group key would be the following based on the specified levels:
-# 0: ""
-# 1: "Lojic"
-# 2: "Lojic research"
-# 3: "Lojic research Ruby"
-#------------------------------------------------------------------------
-def compute_group_key description, levels, sep = ' '
-  if levels < 1
-    ''
-  else
-    tokens = description.split(sep)
-    if tokens.length > levels
-      tokens[0, levels].join(sep)
-    else
-      description
-    end
-  end
-end
+require 'optparse'
+require 'date'
+require 'json'
 
-#------------------------------------------------------------------------
-# Compute the elapsed time of a TimePair
-# (assumes pair is within same day)
-#------------------------------------------------------------------------
-def elapsed pair
-  (pair.end.time - pair.start.time) * 24.0
-end
+TimeEntry = Struct.new(:is_start, :time, :description)
+TimePair  = Struct.new(:start, :end)
+TimeDay   = Struct.new(:mon, :day, :year, :pairs, :group_hours)
 
-#------------------------------------------------------------------------
-# Return a pair [line, lines_read] where line == nil if eof encountered
-#------------------------------------------------------------------------
-def get_line file
-  lines_read = 0
-  while line = file.gets
-    lines_read += 1
-    line.strip!
-    break unless line.length < 1
-  end
-  return [line, lines_read]
-end
+module TimeClock
 
-#------------------------------------------------------------------------
-# Return a 2 element list of the TimePair's start/end times converted to hours
-# e.g. [ 9.7, 15.4 ]
-# (assumes pair within same day)
-#------------------------------------------------------------------------
-def hours_interval pair
-  [pair.start.time, pair.end.time].map {|t| t.hour + t.min / 60.0 + t.sec / 3600.0 }
-end
+  def self.run args, config
+    options, rest = TimeClock.parse_arguments(args)
 
-#------------------------------------------------------------------------
-# Parse a pair of in/out entries and return a list of pairs or nil.
-# This function will split a single pair into two pairs if it
-# spans a midnight.
-#------------------------------------------------------------------------
-def parse_complete_pair i, o, options
-  begin_date = options[:begin_date]
-  end_date   = options[:end_date]
+    entries = TimeClock.parse_time_entries(config['timelog_path'],
+                                           options[:begin_date],
+                                           options[:end_date],
+                                           rest[0],
+                                           options[:invert_match])
 
-  case
-  # Case 1: out < begin_date => skip
-  when o.time < begin_date
-    return nil
+    # Group into days
+    days = TimeClock.parse_days(entries)
 
-  # Case 2: in > end_date => skip
-  when i.time > end_date
-    return nil
+    # Print a report and accumulate group stats
+    group_stats = TimeClock.print_report(days, options[:statistics], options[:group_levels])
 
-  # Case 3: entry intersects [begin_date, end_date]
-  else
-    pair = TimePair.new(i,o)
-    if i.time >= begin_date && o.time < end_date
-      # all of pair is within filtered span
-      if i.time.day == o.time.day
-        return [ pair ]
-      else
-        return split_time_pair(pair)
-      end
-    elsif i.time < begin_date
-      # split and append second portion
-      return [ split_time_pair(pair)[1] ]
-    elsif o.time >= end_date
-      # split and append first portion
-      return [ split_time_pair(pair)[0] ]
-    else
-      raise 'this should not happen :)'
-    end
-  end
-end
-
-#------------------------------------------------------------------------
-# Aggregate a list of TimePair objects into days
-#------------------------------------------------------------------------
-def parse_days pairs
-  current_day = { :mon => 1, :day => 1, :year => 1970 }
-  days = []
-  pairs.each do |pair|
-    t = pair.start.time
-    day = { :mon => t.mon, :day => t.day, :year => t.year }
-
-    if day == current_day
-      days.last[:pairs] << pair
-    else
-      days << TimeDay.new(day[:mon], day[:day], day[:year], [pair], 0.0)
-      current_day = day
-    end
-  end
-  days
-end
-
-#------------------------------------------------------------------------
-# Parse an emacs time log file and return a list of TimePair objects
-#------------------------------------------------------------------------
-def parse_file file, options
-  line_no = 0
-  pairs = []
-
-  while true
-    # Obtain a pair of TimeEntry objects and the current line_no
-    result = parse_in_out(file, line_no)
-    i, o, line_no = result # in, out, line
-
-    # If i is nil, we've hit EOF - exit loop
-    break unless i
-
-    unless o
-      # o is nil, active interval, use now for second entry
-      raise 'expected in entry' unless i.is_start
-      # Manually create a Date to avoid having a time zone issue
-      o = TimeEntry.new(false, DateTime.parse(Time.now.strftime("%F %T")), nil)
-    end
-
-    # We have a complete in/out pair
-    if (pair = parse_complete_pair(i, o, options))
-      pairs.concat(pair)
-    end
-
-  end
-
-  pairs
-rescue Exception => e
-  puts "Parse error on line %d: %s" % [line_no, e.message]
-  exit 0
-end
-
-#------------------------------------------------------------------------
-# Parse a pair of lines (in/out) from an emacs time log file and return
-# a triplet consisting of two TimeEntry objects and the number of lines
-# read. TimeEntry slots will be nil if unable to read or parse a line.
-#------------------------------------------------------------------------
-def parse_in_out file, line_no
-  # Parse in
-  line, lines_read = get_line(file)
-  line_no += lines_read
-  unless line
-    return [nil, nil, line_no]
-  end
-  start_entry = parse_line(line)
-
-  # Parse out
-  line, lines_read = get_line(file)
-  line_no += lines_read
-  unless line
-    return [start_entry, nil, line_no]
-  end
-  end_entry = parse_line(line)
-
-  return [start_entry, end_entry, line_no]
-rescue Exception => e
-  puts "Parse error on line %d: %s" % [line_no, e.message]
-  exit 0
-end
-
-#------------------------------------------------------------------------
-# Parse a line from an emacs time log file and return a TimeEntry
-#------------------------------------------------------------------------
-def parse_line line
-  raise 'invalid line' unless
-    line =~ /^([io]) (\d{4}\/\d\d\/\d\d \d\d:\d\d:\d\d)(?: (\S.*)?)?$/
-  TimeEntry.new($1 == 'i',  DateTime.parse($2, true), $3 || '')
-end
-
-#------------------------------------------------------------------------
-# Print a report and accumulate grouping statistics
-#------------------------------------------------------------------------
-def print_report days, options
-  # Report
-  days.each do |day|
-    puts "%s/%s/%s" % [day[:mon], day[:day], day[:year]]
-    group_hours = { '' => 0.0 } if options[:statistics]
-    day.pairs.each do |pair|
-      hours = hours_interval(pair)
-      puts "%05.2f-%05.2f %s" % (hours + [pair.start.description])
-      if options[:statistics]
-        group_key = compute_group_key(pair.start.description, options[:group_levels])
-        group_hours[group_key] = (group_hours[group_key] || 0.0) + (hours[1] - hours[0])
-      end
-    end
     if options[:statistics]
-      puts '------------------'
-      if group_hours.length > 1
-        group_hours.delete('')
-        daily_sum = 0.0
-        group_hours.sort.each do |key, value|
-          puts "%5.2f %s" % [value, key]
-          daily_sum += value
-        end
+      TimeClock.print_statistics(days, config['day_starts'], options[:today])
+    end
+
+    if options[:week_stats]
+      TimeClock.print_week_stats(days, config['hours'], config['day_starts'], config['work_days'])
+    end
+  end
+
+  def self.beginning_of_week d
+    d.monday? ? d : beginning_of_week(d-1)
+  end
+
+  #------------------------------------------------------------------------
+  # Compute a grouping key from the time description based on the
+  # specified levels. For example, if the description was the following:
+  # Lojic research Ruby
+  # Then the group key would be the following based on the specified levels:
+  # 0: ""
+  # 1: "Lojic"
+  # 2: "Lojic research"
+  # 3: "Lojic research Ruby"
+  #------------------------------------------------------------------------
+  def self.compute_group_key description, levels, sep = ' '
+    if levels < 1
+      ''
+    else
+      tokens = description.split(sep)
+      if tokens.length > levels
+        tokens[0, levels].join(sep)
       else
-        daily_sum = group_hours['']
+        description
       end
-      puts "%5.2f Daily Total" % daily_sum
-      day.group_hours = group_hours
-    end
-    puts
-  end
-end
-
-#------------------------------------------------------------------------
-# Split a TimePair object into two TimePair objects before/after midnight
-#------------------------------------------------------------------------
-def split_time_pair pair
-  first = pair.start.time
-  end_of_first = DateTime.civil(first.year, first.mon, first.day, 23, 59, 59)
-  second = pair.end.time
-  beg_of_second = DateTime.civil(second.year, second.mon, second.day, 0, 0, 0)
-  [
-   TimePair.new(pair.start, TimeEntry.new(false, end_of_first, nil)),
-   TimePair.new(TimeEntry.new(true, beg_of_second, pair.start.description), pair.end)
-  ]
-end
-
-def beginning_of_week d
-  d.monday? ? d : beginning_of_week(d-1)
-end
-
-def min a, b
-  a < b ? a : b
-end
-
-def expected_hours total, allocated
-  wday = Date.today.wday - 1
-  wday = 6 if wday < 0
-
-  # Compute fraction of week completed
-  t1 = DateTime.parse("#{CONFIG['day_starts']} #{Time.now.zone}").to_time
-  t2 = Time.now
-
-  daily = allocated / (CONFIG['work_days'] || 5).to_i
-
-  percent_of_day = (t2-t1) / ((t1 + ((daily / 0.80) * 3600).to_i) - t1)
-
-  (wday * daily) + min(daily, percent_of_day * daily)
-end
-
-#------------------------------------------------------------------------
-# Handle command line arguments
-#------------------------------------------------------------------------
-options = {
-  :begin_date   => DateTime.parse("2000-01-01", true),
-  :end_date     => DateTime.parse("2050-01-01", true),
-  :group_levels => 0,
-  :invert_match => false,
-  :statistics   => false,
-  :today        => false,
-  :week_date    => beginning_of_week(DateTime.parse(Date.today.to_s)),
-}
-opts = OptionParser.new
-opts.on("-h", "--help")            { puts opts; exit }
-opts.on("-b", "--begin-date DATE") {|d| options[:begin_date] = DateTime.parse(d, true) }
-opts.on("-e", "--end-date DATE")   {|d| options[:end_date]   = DateTime.parse(d, true) }
-opts.on("-s", "--statistics")      { options[:statistics]    = true              }
-opts.on("-v", "--invert-match")    { options[:invert_match]  = true              }
-opts.on("-t", "--today-only") do
-  options[:begin_date] = DateTime.parse(Time.now.strftime("%Y-%m-%d"))
-  options[:today] = true
-end
-opts.on("-g", "--group LEVELS") do |levels|
-  options[:group_levels] = levels.to_i
-  options[:statistics] = true if options[:group_levels] > 0
-end
-opts.on("-w", "--week [DATE]") do |d|
-  options[:week_date]    = DateTime.parse(d, true) if d
-  options[:begin_date]   = options[:week_date]
-  options[:end_date]     = options[:week_date] + 7
-  options[:week_stats]   = true
-  options[:statistics]   = true
-  options[:group_levels] = 1
-end
-rest = opts.parse(ARGV) rescue RDoc::usage('usage')
-
-# Parse the file
-begin
-  timelog_path = CONFIG['timelog_path']
-  raise "Unable to find your timelog file at: '#{timelog_path}'" unless timelog_path && File.exists?(timelog_path)
-  file = File.new(timelog_path, 'r')
-  entries = parse_file(file, options).select do |e|
-    match = e[0][:description] =~ /#{rest[0] || '.*'}/i
-    options[:invert_match] ? !match : match
-  end
-ensure
-  file.close if file
-end
-
-# Group into days
-days = parse_days(entries)
-
-# Print a report and accumulate group stats
-group_stats = print_report(days, options)
-
-if options[:statistics]
-  puts 'Daily Hours'
-  puts '-----------'
-  group_hours = { '' => 0.0 }
-  total_sum = 0.0
-  days.each do |day|
-    daily_sum = 0.0
-    day.group_hours.each do |key, value|
-      group_hours[key] = (group_hours[key] || 0.0) + value
-      daily_sum += value
-    end
-    puts "%2d/%02.2d/%d: %5.2f" % [day[:mon], day[:day], day[:year], daily_sum]
-    total_sum += daily_sum
-  end
-  puts "Total      %6.2f" % total_sum
-
-  puts
-  puts 'Category Totals'
-  puts "---------------"
-  if group_hours.length > 1
-    group_hours.delete('')
-    sum = 0.0
-    group_hours.sort.each do |key, value|
-      puts "%5.2f (%5.1f %%) %s" % [value, (value / total_sum * 100.0), key]
-      sum += value
-    end
-  else
-    sum = group_hours['']
-  end
-  raise 'calculation error' if (sum - total_sum).abs > 0.0001
-  puts "%5.2f Total hours" % sum
-
-  if group_hours.length > 1
-    puts
-    puts 'Most Time Spent'
-    puts "---------------"
-    sum = 0.0
-    group_hours.sort {|a,b| b[1] <=> a[1] }.each do |key, value|
-      puts "%5.2f (%5.1f %%) %s" % [value, (value / total_sum * 100.0), key]
-      sum += value
     end
   end
-  puts "%5.2f Total hours" % sum
 
-  if options[:today]
-    puts
-    puts 'Daily Percentage'
-    puts '----------------'
+  def self.default_options
+    {
+      :begin_date   => DateTime.parse("2000-01-01", true),
+      :end_date     => DateTime.parse("2050-01-01", true),
+      :group_levels => 0,
+      :invert_match => false,
+      :statistics   => false,
+      :today        => false,
+      :week_date    => beginning_of_week(DateTime.parse(Date.today.to_s)),
+    }
+  end
 
-    t1 = DateTime.parse("#{CONFIG['day_starts']} #{Time.now.zone}").to_time
+  #------------------------------------------------------------------------
+  # Compute the elapsed time of a TimePair
+  # (assumes pair is within same day)
+  #------------------------------------------------------------------------
+  def self.elapsed pair
+    (pair.end.time - pair.start.time) * 24.0
+  end
+
+  def self.expected_hours total, allocated, day_starts, work_days
+    wday = Date.today.wday - 1
+    wday = 6 if wday < 0
+
+    # Compute fraction of week completed
+    t1 = DateTime.parse("#{day_starts} #{Time.now.zone}").to_time
     t2 = Time.now
-    elapsed_hours = (t2-t1).to_f / 3600.0
 
-    puts "Daily percent: %5.1f" % ((total_sum / elapsed_hours) * 100.0)
+    daily = allocated / (work_days || 5).to_i
+
+    percent_of_day = (t2-t1) / ((t1 + ((daily / 0.80) * 3600).to_i) - t1)
+
+    (wday * daily) + min(daily, percent_of_day * daily)
   end
-end
 
-if options[:week_stats]
-  puts ''
-  puts 'Week Stats'
-  puts '----------'
-  sum = {}
-  group_hours = {}
+  #------------------------------------------------------------------------
+  # Return a pair [line, lines_read] where line == nil if eof encountered
+  #------------------------------------------------------------------------
+  def self.get_line file
+    lines_read = 0
 
-  days.each do |day|
-    day.group_hours.each do |key,value|
-      group_hours[key] = (group_hours[key] || 0.0) + value
+    while line = file.gets
+      lines_read += 1
+      line.strip!
+      break unless line.length < 1
+    end
+
+    return [line, lines_read]
+  end
+
+  #------------------------------------------------------------------------
+  # Return a 2 element list of the TimePair's start/end times converted to hours
+  # e.g. [ 9.7, 15.4 ]
+  # (assumes pair within same day)
+  #------------------------------------------------------------------------
+  def self.hours_interval pair
+    [pair.start.time, pair.end.time].map {|t| t.hour + t.min / 60.0 + t.sec / 3600.0 }
+  end
+
+  def self.min a, b
+    a < b ? a : b
+  end
+
+  def self.parse_arguments args
+    options = default_options
+
+    opts = OptionParser.new
+    opts.on("-h", "--help")            { puts opts; exit }
+    opts.on("-b", "--begin-date DATE") {|d| options[:begin_date] = DateTime.parse(d, true) }
+    opts.on("-e", "--end-date DATE")   {|d| options[:end_date]   = DateTime.parse(d, true) }
+    opts.on("-s", "--statistics")      { options[:statistics]    = true              }
+    opts.on("-v", "--invert-match")    { options[:invert_match]  = true              }
+    opts.on("-t", "--today-only") do
+      options[:begin_date] = DateTime.parse(Time.now.strftime("%Y-%m-%d"))
+      options[:today] = true
+    end
+    opts.on("-g", "--group LEVELS") do |levels|
+      options[:group_levels] = levels.to_i
+      options[:statistics] = true if options[:group_levels] > 0
+    end
+    opts.on("-w", "--week [DATE]") do |d|
+      options[:week_date]    = DateTime.parse(d, true) if d
+      options[:begin_date]   = options[:week_date]
+      options[:end_date]     = options[:week_date] + 7
+      options[:week_stats]   = true
+      options[:statistics]   = true
+      options[:group_levels] = 1
+    end
+
+    rest = opts.parse(args) rescue RDoc::usage('usage')
+    [ options, rest ]
+  end
+
+  #------------------------------------------------------------------------
+  # Parse a pair of in/out entries and return a list of pairs or nil.
+  # This function will split a single pair into two pairs if it
+  # spans a midnight.
+  #------------------------------------------------------------------------
+  def self.parse_complete_pair i, o, begin_date, end_date
+    case
+      # Case 1: out < begin_date => skip
+    when o.time < begin_date
+      return nil
+
+      # Case 2: in > end_date => skip
+    when i.time > end_date
+      return nil
+
+      # Case 3: entry intersects [begin_date, end_date]
+    else
+      pair = TimePair.new(i,o)
+      if i.time >= begin_date && o.time < end_date
+        # all of pair is within filtered span
+        if i.time.day == o.time.day
+          return [ pair ]
+        else
+          return split_time_pair(pair)
+        end
+      elsif i.time < begin_date
+        # split and append second portion
+        return [ split_time_pair(pair)[1] ]
+      elsif o.time >= end_date
+        # split and append first portion
+        return [ split_time_pair(pair)[0] ]
+      else
+        raise 'this should not happen :)'
+      end
     end
   end
 
-  allocations = CONFIG['hours']
-  company_hours = []
-  total_hours = 0.0
+  #------------------------------------------------------------------------
+  # Aggregate a list of TimePair objects into days
+  #------------------------------------------------------------------------
+  def self.parse_days pairs
+    current_day = { :mon => 1, :day => 1, :year => 1970 }
+    days = []
+    pairs.each do |pair|
+      t = pair.start.time
+      day = { :mon => t.mon, :day => t.day, :year => t.year }
 
-  group_hours.each do |key,value|
-    allocated = allocations[key]
-    company_hours << [
-                      key,
-                      value,
-                      allocated ? (value / allocations[key]) * 100.0 : 0.0
-                     ]
-    total_hours += value
+      if day == current_day
+        days.last[:pairs] << pair
+      else
+        days << TimeDay.new(day[:mon], day[:day], day[:year], [pair], 0.0)
+        current_day = day
+      end
+    end
+    days
   end
 
-  # First print records for companies with allocations but no
-  # time. These are only the "unstarted" categories, so sort by
-  # allocated hours descending.
-  hours_keys = company_hours.map {|e| e[0]}
-  allocations. # { k=>v, ... }
-    select {|k,v| !hours_keys.include?(k) }. # [ [k,v] ]
-    sort {|a,b| b[1] <=> a[1] }.
-    each do |k,v|
-    puts "( %6.2f %% ) %5.2f / %5.2f #{k}" % [ 0.0, 0.0, v ]
+  #------------------------------------------------------------------------
+  # Parse an emacs time log file and return a list of TimePair objects
+  #------------------------------------------------------------------------
+  def self.parse_file file, begin_date, end_date
+    line_no = 0
+    pairs = []
+
+    while true
+      # Obtain a pair of TimeEntry objects and the current line_no
+      result = parse_in_out(file, line_no)
+      i, o, line_no = result # in, out, line
+
+      # If i is nil, we've hit EOF - exit loop
+      break unless i
+
+      unless o
+        # o is nil, active interval, use now for second entry
+        raise 'expected in entry' unless i.is_start
+        # Manually create a Date to avoid having a time zone issue
+        o = TimeEntry.new(false, DateTime.parse(Time.now.strftime("%F %T")), nil)
+      end
+
+      # We have a complete in/out pair
+      if (pair = parse_complete_pair(i, o, begin_date, end_date))
+        pairs.concat(pair)
+      end
+
+    end
+
+    pairs
+  rescue Exception => e
+    puts "Parse error on line %d: %s" % [line_no, e.message]
+    exit 0
   end
 
-  company_hours.sort {|a,b| a[2] <=> b[2] }.each do |pair|
-    puts "( %6.2f %% ) %5.2f / %5.2f #{pair[0]}" % [ pair[2], pair[1], allocations[pair[0]] ]
+  #------------------------------------------------------------------------
+  # Parse a pair of lines (in/out) from an emacs time log file and return
+  # a triplet consisting of two TimeEntry objects and the number of lines
+  # read. TimeEntry slots will be nil if unable to read or parse a line.
+  #------------------------------------------------------------------------
+  def self.parse_in_out file, line_no
+    # Parse in
+    line, lines_read = get_line(file)
+    line_no += lines_read
+    unless line
+      return [nil, nil, line_no]
+    end
+    start_entry = parse_line(line)
+
+    # Parse out
+    line, lines_read = get_line(file)
+    line_no += lines_read
+    unless line
+      return [start_entry, nil, line_no]
+    end
+    end_entry = parse_line(line)
+
+    return [start_entry, end_entry, line_no]
+  rescue Exception => e
+    puts "Parse error on line %d: %s" % [line_no, e.message]
+    exit 0
   end
-  puts ''
-  total_allocated = allocations.inject(0.0) {|memo,pair| memo + pair[1]}
-  puts "( %6.2f %% ) %5.2f / %5.2f Total" % [ total_hours / total_allocated * 100.0, total_hours, total_allocated ]
 
-  puts ''
-  expected = expected_hours(total_hours, total_allocated)
-
-  if expected > total_hours
-    puts "Behind %.1f hours" % (expected - total_hours)
-  else
-    puts "Ahead %.1f hours" % (total_hours - expected)
+  #------------------------------------------------------------------------
+  # Parse a line from an emacs time log file and return a TimeEntry
+  #------------------------------------------------------------------------
+  def self.parse_line line
+    raise 'invalid line' unless
+      line =~ /^([io]) (\d{4}\/\d\d\/\d\d \d\d:\d\d:\d\d)(?: (\S.*)?)?$/
+    TimeEntry.new($1 == 'i',  DateTime.parse($2, true), $3 || '')
   end
 
-  puts ''
-  group_hours.map {|k,v| k }.select {|k| !allocations[k] }.each do |k|
-    puts "WARNING: no allocation found for #{k}"
+  def self.parse_time_entries timelog_path, begin_date, end_date, description, invert_match
+    # Parse the file
+    begin
+      timelog_path = timelog_path
+      raise "Unable to find your timelog file at: '#{timelog_path}'" unless
+        timelog_path && File.exists?(timelog_path)
+      file = File.new(timelog_path, 'r')
+
+      entries = parse_file(file, begin_date, end_date).select do |e|
+        match = e[0][:description] =~ /#{description || '.*'}/i
+        invert_match ? !match : match
+      end
+
+      entries
+    ensure
+      file.close if file
+    end
+  end
+
+  #------------------------------------------------------------------------
+  # Print a report and accumulate grouping statistics
+  #------------------------------------------------------------------------
+  def self.print_report days, statistics, group_levels
+    # Report
+    days.each do |day|
+      puts "%s/%s/%s" % [day[:mon], day[:day], day[:year]]
+      group_hours = { '' => 0.0 } if statistics
+      day.pairs.each do |pair|
+        hours = hours_interval(pair)
+        puts "%05.2f-%05.2f %s" % (hours + [pair.start.description])
+        if statistics
+          group_key = compute_group_key(pair.start.description, group_levels)
+          group_hours[group_key] = (group_hours[group_key] || 0.0) + (hours[1] - hours[0])
+        end
+      end
+      if statistics
+        puts '------------------'
+        if group_hours.length > 1
+          group_hours.delete('')
+          daily_sum = 0.0
+          group_hours.sort.each do |key, value|
+            puts "%5.2f %s" % [value, key]
+            daily_sum += value
+          end
+        else
+          daily_sum = group_hours['']
+        end
+        puts "%5.2f Daily Total" % daily_sum
+        day.group_hours = group_hours
+      end
+      puts
+    end
+  end
+
+  def self.print_statistics days, day_starts, today
+    puts 'Daily Hours'
+    puts '-----------'
+    group_hours = { '' => 0.0 }
+    total_sum = 0.0
+    days.each do |day|
+      daily_sum = 0.0
+      day.group_hours.each do |key, value|
+        group_hours[key] = (group_hours[key] || 0.0) + value
+        daily_sum += value
+      end
+      puts "%2d/%02.2d/%d: %5.2f" % [day[:mon], day[:day], day[:year], daily_sum]
+      total_sum += daily_sum
+    end
+    puts "Total      %6.2f" % total_sum
+
+    puts
+    puts 'Category Totals'
+    puts "---------------"
+    if group_hours.length > 1
+      group_hours.delete('')
+      sum = 0.0
+      group_hours.sort.each do |key, value|
+        puts "%5.2f (%5.1f %%) %s" % [value, (value / total_sum * 100.0), key]
+        sum += value
+      end
+    else
+      sum = group_hours['']
+    end
+    raise 'calculation error' if (sum - total_sum).abs > 0.0001
+    puts "%5.2f Total hours" % sum
+
+    if group_hours.length > 1
+      puts
+      puts 'Most Time Spent'
+      puts "---------------"
+      sum = 0.0
+      group_hours.sort {|a,b| b[1] <=> a[1] }.each do |key, value|
+        puts "%5.2f (%5.1f %%) %s" % [value, (value / total_sum * 100.0), key]
+        sum += value
+      end
+    end
+    puts "%5.2f Total hours" % sum
+
+    if today
+      puts
+      puts 'Daily Percentage'
+      puts '----------------'
+
+      t1 = DateTime.parse("#{day_starts} #{Time.now.zone}").to_time
+      t2 = Time.now
+      elapsed_hours = (t2-t1).to_f / 3600.0
+
+      puts "Daily percent: %5.1f" % ((total_sum / elapsed_hours) * 100.0)
+    end
+  end
+
+  def self.print_week_stats days, hours_hsh, day_starts, work_days
     puts ''
+    puts 'Week Stats'
+    puts '----------'
+    sum = {}
+    group_hours = {}
+
+    days.each do |day|
+      day.group_hours.each do |key,value|
+        group_hours[key] = (group_hours[key] || 0.0) + value
+      end
+    end
+
+    allocations = hours_hsh
+    company_hours = []
+    total_hours = 0.0
+
+    group_hours.each do |key,value|
+      allocated = allocations[key]
+      company_hours << [
+                        key,
+                        value,
+                        allocated ? (value / allocations[key]) * 100.0 : 0.0
+                       ]
+      total_hours += value
+    end
+
+    # First print records for companies with allocations but no
+    # time. These are only the "unstarted" categories, so sort by
+    # allocated hours descending.
+    hours_keys = company_hours.map {|e| e[0]}
+    allocations. # { k=>v, ... }
+      select {|k,v| !hours_keys.include?(k) }. # [ [k,v] ]
+      sort {|a,b| b[1] <=> a[1] }.
+      each do |k,v|
+      puts "( %6.2f %% ) %5.2f / %5.2f #{k}" % [ 0.0, 0.0, v ]
+    end
+
+    company_hours.sort {|a,b| a[2] <=> b[2] }.each do |pair|
+      puts "( %6.2f %% ) %5.2f / %5.2f #{pair[0]}" % [ pair[2], pair[1], allocations[pair[0]] ]
+    end
+    puts ''
+    total_allocated = allocations.inject(0.0) {|memo,pair| memo + pair[1]}
+    puts "( %6.2f %% ) %5.2f / %5.2f Total" % [ total_hours / total_allocated * 100.0, total_hours, total_allocated ]
+
+    puts ''
+    expected = TimeClock.expected_hours(total_hours, total_allocated, day_starts, work_days)
+
+    if expected > total_hours
+      puts "Behind %.1f hours" % (expected - total_hours)
+    else
+      puts "Ahead %.1f hours" % (total_hours - expected)
+    end
+
+    puts ''
+    group_hours.map {|k,v| k }.select {|k| !allocations[k] }.each do |k|
+      puts "WARNING: no allocation found for #{k}"
+      puts ''
+    end
   end
+
+  #------------------------------------------------------------------------
+  # Split a TimePair object into two TimePair objects before/after midnight
+  #------------------------------------------------------------------------
+  def self.split_time_pair pair
+    first = pair.start.time
+    end_of_first = DateTime.civil(first.year, first.mon, first.day, 23, 59, 59)
+    second = pair.end.time
+    beg_of_second = DateTime.civil(second.year, second.mon, second.day, 0, 0, 0)
+    [
+     TimePair.new(pair.start, TimeEntry.new(false, end_of_first, nil)),
+     TimePair.new(TimeEntry.new(true, beg_of_second, pair.start.description), pair.end)
+    ]
+  end
+end
+
+#------------------------------------------------------------------------
+# Run
+#------------------------------------------------------------------------
+
+if __FILE__ == $0
+  TimeClock.run(ARGV, JSON.parse(IO.read(File.join(File.dirname(__FILE__), 'timeclock.json'))))
 end
