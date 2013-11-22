@@ -120,6 +120,10 @@ module TimeClock
     d.monday? ? d : beginning_of_week(d-1)
   end
 
+  def self.allocation_for_description allocations, description
+    allocations[description.split(' ').first] || 0.0
+  end
+
   #------------------------------------------------------------------------
   # Compute a grouping key from the time description based on the
   # specified levels. For example, if the description was the following:
@@ -485,7 +489,8 @@ module TimeClock
 
     days.each do |day|
       day.group_hours.each do |key,value|
-        group_hours[key] = (group_hours[key] || 0.0) + value
+        group_key = compute_group_key(key, 1) # Weekly report uses only 1 group
+        group_hours[group_key] = (group_hours[group_key] || 0.0) + value
       end
     end
 
@@ -515,7 +520,7 @@ module TimeClock
     end
 
     company_hours.sort {|a,b| a[2] <=> b[2] }.each do |pair|
-      puts "( %6.2f %% ) %5.2f / %5.2f #{pair[0]}" % [ pair[2], pair[1], allocations[pair[0]] ]
+      puts "( %6.2f %% ) %5.2f / %5.2f #{pair[0]}" % [ pair[2], pair[1], allocation_for_description(allocations, pair[0]) ]
     end
     puts ''
     total_allocated = allocations.inject(0.0) {|memo,pair| memo + pair[1]}
@@ -530,11 +535,6 @@ module TimeClock
       puts "Ahead %.1f hours" % (total_hours - expected)
     end
 
-    puts ''
-    group_hours.map {|k,v| k }.select {|k| !allocations[k] }.each do |k|
-      puts "WARNING: no allocation found for #{k}"
-      puts ''
-    end
   end
 
   #------------------------------------------------------------------------
