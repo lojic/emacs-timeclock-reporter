@@ -476,7 +476,9 @@ module TimeClock
       t2 = Time.now
       elapsed_hours = (t2-t1).to_f / 3600.0
 
-      puts "Daily percent: %5.1f" % ((total_sum / elapsed_hours) * 100.0)
+      pct = ((total_sum / elapsed_hours) * 100.0)
+      puts "Daily percent: %5.1f" % pct
+      puts "Hours*Percent: %5.1f" % (pct * total_sum)
     end
   end
 
