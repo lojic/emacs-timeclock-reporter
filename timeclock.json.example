@@ -1,6 +1,7 @@
 {
   "day_starts" : "8:00",
   "work_days" : 5,
+  "target_percent" : 80.0,
   "timelog_path" : "/path/to/your/timelog",
   "hours" : {
     "Client1"              : 20.0,

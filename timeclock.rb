@@ -108,7 +108,7 @@ module TimeClock
     group_stats = TimeClock.print_report(days, options[:statistics], options[:group_levels])
 
     if options[:statistics]
-      TimeClock.print_statistics(days, config['day_starts'], options[:today])
+      TimeClock.print_statistics(days, config['day_starts'], options[:today], config['target_percent'])
     end
 
     if options[:week_stats]
@@ -423,7 +423,7 @@ module TimeClock
     end
   end
 
-  def self.print_statistics days, day_starts, today
+  def self.print_statistics days, day_starts, today, target_percent
     puts 'Daily Hours'
     puts '-----------'
     group_hours = { '' => 0.0 }
@@ -477,6 +477,8 @@ module TimeClock
       elapsed_hours = (t2-t1).to_f / 3600.0
 
       puts "Daily percent: %5.1f" % ((total_sum / elapsed_hours) * 100.0)
+      puts "Surplus (min): %5.1f" % ((total_sum - elapsed_hours * target_percent / 100.0) * 60.0) if
+        target_percent
     end
   end
 
