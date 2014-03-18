@@ -76,7 +76,7 @@
 # {
 #   "day_starts"     : "8:00",
 #   "work_days"      : 6,
-#   "target_percent" : 80.0,
+#   "work_hours"     : 7,
 #   "timelog_path"   : "/path_to/emacs/timelog"
 # }
 
@@ -106,7 +106,7 @@ module TimeClock
     group_stats = TimeClock.print_report(days, options[:statistics], options[:group_levels])
 
     if options[:statistics]
-      TimeClock.print_statistics(days, config['day_starts'], options[:today], config['target_percent'])
+      TimeClock.print_statistics(days, config['day_starts'], options[:today], config['work_hours'] || 7)
     end
   end
 
@@ -398,7 +398,7 @@ module TimeClock
     end
   end
 
-  def self.print_statistics days, day_starts, today, target_percent
+  def self.print_statistics days, day_starts, today, work_hours
     puts 'Daily Hours'
     puts '-----------'
     group_hours = { '' => 0.0 }
@@ -444,16 +444,17 @@ module TimeClock
 
     if today
       puts
-      puts 'Daily Percentage'
+      puts 'Daily Stats'
       puts '----------------'
 
       t1 = DateTime.parse("#{day_starts} #{Time.now.zone}").to_time
       t2 = Time.now
-      elapsed_hours = (t2-t1).to_f / 3600.0
 
-      puts "Daily percent: %5.1f" % ((total_sum / elapsed_hours) * 100.0)
-      puts "Surplus (min): %5.1f" % ((total_sum - elapsed_hours * target_percent / 100.0) * 60.0) if
-        target_percent
+      elapsed_hours = (t2-t1).to_f / 3600.0
+      daily_percent = ((total_sum / elapsed_hours) * 100.0)
+      eod = Time.now + ((work_hours - elapsed_hours) * 60 * 60)
+
+      puts "%2.2f @ %3.1f%% EOD #{eod.strftime('%H:%m')}" % [elapsed_hours, daily_percent]
     end
   end
 
