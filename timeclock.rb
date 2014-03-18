@@ -74,12 +74,10 @@
 
 # Config file is of the form:
 # {
-#   "day_starts" : "8:00",
-#   "hours" : {
-#     "ClientA" : 20.0,      # Hours per week for Client A
-#     "ClientB" : 20.0,
-#     ...
-#   }
+#   "day_starts"     : "8:00",
+#   "work_days"      : 6,
+#   "target_percent" : 80.0,
+#   "timelog_path"   : "/path_to/emacs/timelog"
 # }
 
 require 'optparse'
@@ -110,18 +108,10 @@ module TimeClock
     if options[:statistics]
       TimeClock.print_statistics(days, config['day_starts'], options[:today], config['target_percent'])
     end
-
-    if options[:week_stats]
-      TimeClock.print_week_stats(days, config['hours'], config['day_starts'], config['work_days'])
-    end
   end
 
   def self.beginning_of_week d
     d.monday? ? d : beginning_of_week(d-1)
-  end
-
-  def self.allocation_for_description allocations, description
-    allocations[description.split(' ').first] || 0.0
   end
 
   #------------------------------------------------------------------------
@@ -165,21 +155,6 @@ module TimeClock
   #------------------------------------------------------------------------
   def self.elapsed pair
     (pair.end.time - pair.start.time) * 24.0
-  end
-
-  def self.expected_hours total, allocated, day_starts, work_days
-    wday = Date.today.wday - 1
-    wday = 6 if wday < 0
-
-    # Compute fraction of week completed
-    t1 = DateTime.parse("#{day_starts} #{Time.now.zone}").to_time
-    t2 = Time.now
-
-    daily = allocated / (work_days || 5).to_i
-
-    percent_of_day = (t2-t1) / ((t1 + ((daily / 0.80) * 3600).to_i) - t1)
-
-    (wday * daily) + min(daily, percent_of_day * daily)
   end
 
   #------------------------------------------------------------------------
@@ -480,63 +455,6 @@ module TimeClock
       puts "Surplus (min): %5.1f" % ((total_sum - elapsed_hours * target_percent / 100.0) * 60.0) if
         target_percent
     end
-  end
-
-  def self.print_week_stats days, hours_hsh, day_starts, work_days
-    puts ''
-    puts 'Week Stats'
-    puts '----------'
-    sum = {}
-    group_hours = {}
-
-    days.each do |day|
-      day.group_hours.each do |key,value|
-        group_key = compute_group_key(key, 1) # Weekly report uses only 1 group
-        group_hours[group_key] = (group_hours[group_key] || 0.0) + value
-      end
-    end
-
-    allocations = hours_hsh
-    company_hours = []
-    total_hours = 0.0
-
-    group_hours.each do |key,value|
-      allocated = allocations[key]
-      company_hours << [
-                        key,
-                        value,
-                        allocated ? (value / allocations[key]) * 100.0 : 0.0
-                       ]
-      total_hours += value
-    end
-
-    # First print records for companies with allocations but no
-    # time. These are only the "unstarted" categories, so sort by
-    # allocated hours descending.
-    hours_keys = company_hours.map {|e| e[0]}
-    allocations. # { k=>v, ... }
-      select {|k,v| !hours_keys.include?(k) }. # [ [k,v] ]
-      sort {|a,b| b[1] <=> a[1] }.
-      each do |k,v|
-      puts "( %6.2f %% ) %5.2f / %5.2f #{k}" % [ 0.0, 0.0, v ]
-    end
-
-    company_hours.sort {|a,b| a[2] <=> b[2] }.each do |pair|
-      puts "( %6.2f %% ) %5.2f / %5.2f #{pair[0]}" % [ pair[2], pair[1], allocation_for_description(allocations, pair[0]) ]
-    end
-    puts ''
-    total_allocated = allocations.inject(0.0) {|memo,pair| memo + pair[1]}
-    puts "( %6.2f %% ) %5.2f / %5.2f Total" % [ total_hours / total_allocated * 100.0, total_hours, total_allocated ]
-
-    puts ''
-    expected = TimeClock.expected_hours(total_hours, total_allocated, day_starts, work_days)
-
-    if expected > total_hours
-      puts "Behind %.1f hours" % (expected - total_hours)
-    else
-      puts "Ahead %.1f hours" % (total_hours - expected)
-    end
-
   end
 
   #------------------------------------------------------------------------
