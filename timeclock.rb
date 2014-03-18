@@ -455,6 +455,7 @@ module TimeClock
       eod = Time.now + ((work_hours - total_sum) * 60 * 60)
 
       puts "%2.2f @ %3.1f%% EOD #{eod.strftime('%H:%M')}" % [total_sum, daily_percent]
+      puts ''
     end
   end
 
