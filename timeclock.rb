@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-# Copyright (C) 2007-2013 by Brian J. Adkins
+# Copyright (C) 2007-2014 by Brian J. Adkins
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -452,9 +452,9 @@ module TimeClock
 
       elapsed_hours = (t2-t1).to_f / 3600.0
       daily_percent = ((total_sum / elapsed_hours) * 100.0)
-      eod = Time.now + ((work_hours - elapsed_hours) * 60 * 60)
+      eod = Time.now + ((work_hours - total_sum) * 60 * 60)
 
-      puts "%2.2f @ %3.1f%% EOD #{eod.strftime('%H:%m')}" % [elapsed_hours, daily_percent]
+      puts "%2.2f @ %3.1f%% EOD #{eod.strftime('%H:%M')}" % [total_sum, daily_percent]
     end
   end
 
