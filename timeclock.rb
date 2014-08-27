@@ -447,7 +447,7 @@ module TimeClock
         sum += value
       end
     end
-    puts "%5.02d Total hours - %02d/%02d/%04d to %02d/%02d/%04d" % [sum, days.first.mon, days.first.day, days.first.year, days.last.mon, days.last.day, days.last.year]
+    puts "%5.2f Total hours - %02d/%02d/%04d to %02d/%02d/%04d" % [sum, days.first.mon, days.first.day, days.first.year, days.last.mon, days.last.day, days.last.year]
 
     if today
       puts
