@@ -202,10 +202,17 @@ module TimeClock
       options[:group_levels] = levels.to_i
       options[:statistics] = true if options[:group_levels] > 0
     end
-    opts.on("-w", "--week [DATE]") do |d|
-      options[:week_date]    = DateTime.parse(d, true) if d
-      options[:begin_date]   = options[:week_date]
-      options[:end_date]     = options[:week_date] + 7
+    opts.on("-w", "--week [m:n]") do |arg|
+      # For the current week:             -w 0:0 | -w 0 | -w
+      # For the last two weeks:           -w 1:0 | -w 1
+      # For the last three weeks:         -w 2:0 | -w 2
+      # For last week only:               -w 1:1
+      # For last week plus two weeks ago: -w 2:1
+      lst = (arg || '').split(':')
+      m = (lst[0] ? lst[0].to_i : 0)
+      n = (lst[1] ? lst[1].to_i : 0)
+      options[:begin_date]   = options[:week_date] - (7 * m)
+      options[:end_date]     = options[:week_date] - (7 * n) + 7
       options[:week_stats]   = true
       options[:statistics]   = true
       options[:group_levels] = 1
