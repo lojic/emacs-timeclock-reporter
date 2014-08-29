@@ -106,7 +106,7 @@ module TimeClock
     group_stats = TimeClock.print_report(days, options[:statistics], options[:group_levels])
 
     if options[:statistics]
-      TimeClock.print_statistics(days, config['day_starts'], options[:today], config['work_hours'] || 7)
+      TimeClock.print_statistics(days, config['day_starts'], options[:today], config['work_hours'] || 7, date_range_display(options[:begin_date], options[:end_date]))
     end
   end
 
@@ -405,7 +405,7 @@ module TimeClock
     end
   end
 
-  def self.print_statistics days, day_starts, today, work_hours
+  def self.print_statistics days, day_starts, today, work_hours, date_range
     puts 'Daily Hours'
     puts '-----------'
     group_hours = { '' => 0.0 }
@@ -447,7 +447,7 @@ module TimeClock
         sum += value
       end
     end
-    puts "%5.2f Total hours - %02d/%02d/%04d to %02d/%02d/%04d" % [sum, days.first.mon, days.first.day, days.first.year, days.last.mon, days.last.day, days.last.year]
+    puts "%5.2f Total hours - #{date_range}" % sum
 
     if today
       puts
@@ -478,6 +478,18 @@ module TimeClock
      TimePair.new(pair.start, TimeEntry.new(false, end_of_first, nil)),
      TimePair.new(TimeEntry.new(true, beg_of_second, pair.start.description), pair.end)
     ]
+  end
+
+  #------------------------------------------------------------------------
+  # Builds a date range string from a begin and end TimeDay
+  #
+  # begin_date: The beginning TimeDay
+  # end_date:   The ending TimeDay
+  #
+  # Returns a string representing the TimeDay date range
+  #------------------------------------------------------------------------
+  def self.date_range_display(begin_date, end_date)
+    "%02d/%02d/%04d to %02d/%02d/%04d" % [begin_date.mon, begin_date.day, begin_date.year, end_date.mon, end_date.day, end_date.year]
   end
 end
 
