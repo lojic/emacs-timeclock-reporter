@@ -186,6 +186,7 @@ module TimeClock
   end
 
   def self.parse_arguments args
+    explicit_group_levels = false
     options = default_options
 
     opts = OptionParser.new
@@ -199,6 +200,7 @@ module TimeClock
       options[:today] = true
     end
     opts.on("-g", "--group LEVELS") do |levels|
+      explicit_group_levels = true
       options[:group_levels] = levels.to_i
       options[:statistics] = true if options[:group_levels] > 0
     end
@@ -211,10 +213,14 @@ module TimeClock
       lst = (arg || '').split(':')
       m = (lst[0] ? lst[0].to_i : 0)
       n = (lst[1] ? lst[1].to_i : 0)
-      options[:begin_date]   = options[:week_date] - (7 * m)
-      options[:end_date]     = options[:week_date] - (7 * n) + 7
-      options[:week_stats]   = true
-      options[:statistics]   = true
+      options[:begin_date] = options[:week_date] - (7 * m)
+      options[:end_date]   = options[:week_date] - (7 * n) + 7
+      options[:week_stats] = true
+
+      unless explicit_group_levels
+        options[:statistics]   = true
+        options[:group_levels] = 1
+      end
     end
 
     rest = opts.parse(args) rescue RDoc::usage('usage')
