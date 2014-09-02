@@ -106,7 +106,7 @@ module TimeClock
     group_stats = TimeClock.print_report(days, options[:statistics], options[:group_levels])
 
     if options[:statistics]
-      TimeClock.print_statistics(days, config['day_starts'], options[:today], config['work_hours'] || 7, date_range_display(options[:begin_date], options[:end_date]))
+      TimeClock.print_statistics(days, config['day_starts'], options[:today], config['work_hours'] || 7, date_range_display(options[:begin_date], options[:end_date] - 1))
     end
   end
 
@@ -215,7 +215,6 @@ module TimeClock
       options[:end_date]     = options[:week_date] - (7 * n) + 7
       options[:week_stats]   = true
       options[:statistics]   = true
-      options[:group_levels] = 1
     end
 
     rest = opts.parse(args) rescue RDoc::usage('usage')
