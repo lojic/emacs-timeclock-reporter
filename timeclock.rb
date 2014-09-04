@@ -197,6 +197,7 @@ module TimeClock
     opts.on("-v", "--invert-match")    { options[:invert_match]  = true              }
     opts.on("-t", "--today-only") do
       options[:begin_date] = DateTime.parse(Time.now.strftime("%Y-%m-%d"))
+      options[:end_date] = options[:begin_date] + 1
       options[:today] = true
     end
     opts.on("-g", "--group LEVELS") do |levels|
@@ -494,7 +495,13 @@ module TimeClock
   # Returns a string representing the TimeDay date range
   #------------------------------------------------------------------------
   def self.date_range_display(begin_date, end_date)
-    "%02d/%02d/%04d to %02d/%02d/%04d" % [begin_date.mon, begin_date.day, begin_date.year, end_date.mon, end_date.day, end_date.year]
+    return date_string(begin_date) if begin_date == end_date
+
+    date_string(begin_date) + ' to ' + date_string(end_date)
+  end
+
+  def self.date_string(date)
+    "%02d/%02d/%04d" % [date.mon, date.day, date.year]
   end
 end
 
