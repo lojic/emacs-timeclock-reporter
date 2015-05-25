@@ -79,6 +79,10 @@
 #   "work_hours"     : 7,
 #   "timelog_path"   : "/path_to/emacs/timelog"
 # }
+#
+# To have the script automatically compute the "day_starts" value from
+# the first entry of the day in the timelog, use "auto" instead of a
+# time.
 
 require 'optparse'
 require 'date'
@@ -461,7 +465,12 @@ module TimeClock
       puts 'Daily Stats'
       puts '----------------'
 
-      t1 = DateTime.parse("#{day_starts} #{Time.now.zone}").to_time
+      auto_time = days.first.pairs.first.start.time.to_time
+      auto_time -= auto_time.utc_offset
+
+      t1 = day_starts == 'auto' ?
+             auto_time :
+             DateTime.parse("#{day_starts} #{Time.now.zone}").to_time
       t2 = Time.now
 
       elapsed_hours = (t2-t1).to_f / 3600.0
