@@ -2,6 +2,7 @@
   "day_starts" : "8:00",
   "work_days" : 5,
   "work_hours" : 7,
+  "end_time" : "17:30",
   "target_percent" : 80.0,
   "timelog_path" : "/path/to/your/timelog"
 }

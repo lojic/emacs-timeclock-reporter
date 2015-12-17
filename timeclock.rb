@@ -110,7 +110,9 @@ module TimeClock
     group_stats = TimeClock.print_report(days, options[:statistics], options[:group_levels])
 
     if options[:statistics]
-      TimeClock.print_statistics(days, config['day_starts'], options[:today], config['work_hours'] || 7, date_range_display(options[:begin_date], options[:end_date] - 1))
+      TimeClock.print_statistics(days, config['day_starts'], options[:today],
+        config['work_hours'] || 7, config['end_time'] || '17:30',
+        date_range_display(options[:begin_date], options[:end_date] - 1))
     end
   end
 
@@ -416,7 +418,7 @@ module TimeClock
     end
   end
 
-  def self.print_statistics days, day_starts, today, work_hours, date_range
+  def self.print_statistics days, day_starts, today, work_hours, end_time, date_range
     puts 'Daily Hours'
     puts '-----------'
     group_hours = { '' => 0.0 }
@@ -477,7 +479,7 @@ module TimeClock
       daily_percent = ((total_sum / elapsed_hours) * 100.0)
       eod = Time.now + ((work_hours - total_sum) * 60 * 60)
 
-      puts "%2.2f @ %3.1f%% EOD #{eod.strftime('%H:%M')}" % [total_sum, daily_percent]
+      puts "%2.2f @ %3.1f%% EOD #{eod.strftime('%H:%M')} vs. #{end_time}" % [total_sum, daily_percent]
       puts ''
     end
   end
