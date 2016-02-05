@@ -4,6 +4,7 @@
   "work_hours" : 7,
   "end_time" : "17:30",
   "target_percent" : 80.0,
+  "non_billable_entries" : [ "Church", "SideProject" ],
   "timelog_path" : "/path/to/your/timelog"
 }
 

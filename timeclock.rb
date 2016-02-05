@@ -110,8 +110,7 @@ module TimeClock
     group_stats = TimeClock.print_report(days, options[:statistics], options[:group_levels])
 
     if options[:statistics]
-      TimeClock.print_statistics(days, config['day_starts'], options[:today],
-        config['work_hours'] || 7, config['end_time'] || '17:30',
+      TimeClock.print_statistics(config, days, options[:today],
         date_range_display(options[:begin_date], options[:end_date] - 1))
     end
   end
@@ -418,7 +417,11 @@ module TimeClock
     end
   end
 
-  def self.print_statistics days, day_starts, today, work_hours, end_time, date_range
+  def self.print_statistics config, days, today, date_range
+    day_starts = config['day_starts']
+    work_hours = config['work_hours'] || 7
+    end_time = config['end_time'] || '17:00'
+
     puts 'Daily Hours'
     puts '-----------'
     group_hours = { '' => 0.0 }
@@ -434,33 +437,34 @@ module TimeClock
     end
     puts "Total      %6.2f" % total_sum
 
-    puts
-    puts 'Category Totals'
-    puts "---------------"
     if group_hours.length > 1
       group_hours.delete('')
-      sum = 0.0
-      group_hours.sort.each do |key, value|
-        puts "%5.2f (%5.1f %%) %s" % [value, (value / total_sum * 100.0), key]
-        sum += value
-      end
-    else
-      sum = group_hours['']
-    end
-    raise 'calculation error' if (sum - total_sum).abs > 0.0001
-    puts "%5.2f Total hours" % sum
-
-    if group_hours.length > 1
       puts
       puts 'Most Time Spent'
       puts "---------------"
-      sum = 0.0
+      billable_sum = 0.0
+      non_billable_sum = 0.0
       group_hours.sort {|a,b| b[1] <=> a[1] }.each do |key, value|
-        puts "%5.2f (%5.1f %%) %s" % [value, (value / total_sum * 100.0), key]
-        sum += value
+        non_billable = (config['non_billable_entities'] || []).any? {|e|
+          key.downcase.start_with?(e.downcase)
+        }
+        puts "%5.2f (%5.1f %%) %s" % [value, (value / total_sum * 100.0), "#{key} #{non_billable ? '*' : ''}"]
+
+        if non_billable
+          non_billable_sum += value
+        else
+          billable_sum += value
+        end
       end
     end
+    sum = billable_sum + non_billable_sum
+    raise 'calculation error' if (sum - total_sum).abs > 0.0001
+    puts
+    puts "%5.2f Billable hours" % billable_sum
+    puts "%5.2f Non-billable hours *" % non_billable_sum
+    puts
     puts "%5.2f Total hours - #{date_range}" % sum
+    puts
 
     if today
       puts
