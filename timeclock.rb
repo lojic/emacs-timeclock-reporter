@@ -460,8 +460,8 @@ module TimeClock
     sum = billable_sum + non_billable_sum
     raise 'calculation error' if (sum - total_sum).abs > 0.0001
     puts
-    puts "%5.2f Billable hours" % billable_sum
-    puts "%5.2f Non-billable hours *" % non_billable_sum
+    puts("%5.2f Billable hours" % billable_sum) if billable_sum > 0.005
+    puts("%5.2f Non-billable hours *" % non_billable_sum) if non_billable_sum > 0.005
     puts
     puts "%5.2f Total hours - #{date_range}" % sum
     puts
