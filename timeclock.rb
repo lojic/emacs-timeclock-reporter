@@ -462,8 +462,8 @@ module TimeClock
     puts
     puts "%5.2f Total hours - #{date_range}" % sum
     puts
-    puts("%5.2f Billable hours" % billable_sum) if billable_sum > 0.005
-    puts("%5.2f Non-billable hours *" % non_billable_sum) if non_billable_sum > 0.005
+    puts("%5.2f (%3.0f %%) Billable hours" % [ billable_sum, billable_sum / sum * 100.0 ]) if billable_sum > 0.005
+    puts("%5.2f (%3.0f %%) Non-billable hours *" % [non_billable_sum, non_billable_sum / sum * 100.0 ]) if non_billable_sum > 0.005
     puts
 
     if today
