@@ -437,13 +437,14 @@ module TimeClock
     end
     puts "Total      %6.2f" % total_sum
 
+    billable_sum     = 0.0
+    non_billable_sum = 0.0
+
     if group_hours.length > 1
       group_hours.delete('')
       puts
       puts 'Most Time Spent'
       puts "---------------"
-      billable_sum = 0.0
-      non_billable_sum = 0.0
       group_hours.sort {|a,b| b[1] <=> a[1] }.each do |key, value|
         non_billable = (config['non_billable_entities'] || []).any? {|e|
           key.downcase.start_with?(e.downcase)
@@ -457,6 +458,7 @@ module TimeClock
         end
       end
     end
+
     sum = billable_sum + non_billable_sum
     raise 'calculation error' if (sum - total_sum).abs > 0.0001
     puts
