@@ -468,7 +468,7 @@ module TimeClock
     puts("%5.2f (%3.0f %%) Non-billable hours *" % [non_billable_sum, non_billable_sum / sum * 100.0 ]) if non_billable_sum > 0.005
     puts
 
-    if today
+    if today && days.first
       puts
       puts 'Daily Stats'
       puts '----------------'
