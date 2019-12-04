@@ -15,10 +15,12 @@ class Timer
   def self.run(args)
     case args[0]
     when "start"
-      if args.size < 2
-        print_usage && exit
+      desc = args[1..-1].join(" ").strip
+      if desc == ""
+        print_usage
+      else
+        Timer.new.start(desc)
       end
-      Timer.new.start(args[1..-1].join(" "))
     when "stop"
       Timer.new.stop
     when "status"
