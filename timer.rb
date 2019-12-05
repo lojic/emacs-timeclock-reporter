@@ -55,6 +55,7 @@ class Timer
     stop
     s.gsub!(/"/, "")
     `echo "i #{time_str} #{s}" >> #{timelog_path}`
+    puts "started '#{s}'"
     true
   end
 
@@ -62,8 +63,8 @@ class Timer
   def stop
     r = running
     if r
-      puts "stopping: #{r[1]}"
       `echo "o #{time_str}" >> #{timelog_path}`
+      puts "stopped '#{r[1]}'"
     end
     true
   end
