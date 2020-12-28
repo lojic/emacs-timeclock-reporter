@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-# Copyright (C) 2007-2014 by Brian J. Adkins
+# Copyright (C) 2007-2020 by Brian J. Adkins
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -420,7 +420,6 @@ module TimeClock
   def self.print_statistics config, days, today, date_range
     day_starts = config['day_starts']
     work_hours = config['work_hours'] || 7
-    end_time = config['end_time'] || '17:00'
 
     puts 'Daily Hours'
     puts '-----------'
@@ -485,7 +484,7 @@ module TimeClock
       daily_percent = ((total_sum / elapsed_hours) * 100.0)
       eod = Time.now + ((work_hours - total_sum) * 60 * 60)
 
-      puts "%2.2f @ %3.1f%% EOD #{eod.strftime('%H:%M')} vs. #{end_time}" % [total_sum, daily_percent]
+      puts "%2.2f @ %3.1f%% EOD #{eod.strftime('%H:%M')}" % [total_sum, daily_percent]
       puts ''
     end
   end
